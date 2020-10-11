@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script
+            type="text/javascript"
+            src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"
+        ></script>
+        <link href="{{ url_for('static', filename='css/halfmoon-variables.css') }}" rel="stylesheet">
+        <script type="text/javascript" src="{{ url_for('static', filename='js/vivagraph.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/halfmoon.min.js')}}"></script>
+        <script src="https://d3js.org/d3.v6.min.js"></script>
+        <script type="text/javascript" src="{{ url_for('static', filename='js/d3.layout.cloud.js') }}"></script>
+        <style type="text/css">
+            #network {
+                width: 100%;
+                height: 100%;
+            }
+
+            #network svg {
+                width: 100%;
+                height: 100%;
+            }
+
+            .node:hover {
+                fill: red;
+            }
+
+            .foreground-fill {
+                cursor: pointer;
+                fill: var(--lm-base-text-color);
+            }
+
+            .dark-mode .foreground-fill {
+                fill: var(--dm-base-text-color);
+            }
+        </style>
+    </head>
+    <body data-dm-shortcut-enabled="true" class="with-custom-webkit-scrollbars with-custom-css-scrollbars">
+        <div class="modal modal-full ie-scroll-fix" id="channel-info-modal">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content h-full overflow-auto">
+                    <a data-dismiss="modal" class="close" role="button" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </a>
+                    <div id="info" class="container">
+                        <svg></svg>
+                        <ul></ul>
+                        <div></div>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+        <div class="page-wrapper">
+            <div class="content-wrapper">
+                <div class="card w-lg-quarter mw-full z-lg-10 position-lg-absolute row shadow">
+                    <input id="search-input" type="text" class="form-control col">
+                    <button id="search-button" class="btn btn-primary col-auto offset-1">Go!</button>
+                </div>
+                <div id="network"></div>
+            </div>
+        </div>
+        <script>
+            const graphGenerator = Viva.Graph.generator();
+            let graph = graphGenerator.grid(3, 3);
+
+            class GraphVisualizer {
+
+                constructor(container) {
+                    this.container = container;
+                    this.renderer = null;
+                    this.layout = null;
+                    this.graph = null;
+
+                    this.graphics = Viva.Graph.View.svgGraphics();
+                    this.graphics.node(node => {
+                        const container = Viva.Graph.svg('g');
+
+                        let lastX, lastY;
+                        let rendererPaused = false;
+                        container.on('mousedown', async e => {
+                            lastX = e.clientX;
+                            lastY = e.clientY;
+
+                            this.renderer.pause();
+                            rendererPaused = true;
+                        });
+
+                        container.on('mousemove', () => {
+                            if (rendererPaused) {
+                                this.renderer.resume();
+                                rendererPaused = false;
+                            }
+                        });
+
+                        container.on('mouseup', async e => {
+                            if (Math.sqrt((lastX - e.clientX)**2 + (lastY - e.clientY)**2) == 0) {
+                                showChannelInfo(node.id);
+                            }
+                            setTimeout(() => {
+                                this.renderer.resume();
+                                rendererPaused = false;
+                            });
+                        });
+
+                        container.attr('class', 'foreground-fill')
+
+                        container.append('image')
+                            .attr('width', 64)
+                            .attr('height', 64)
+                            .attr('clip-path', 'url(#avatar-clip)')
+                            .link(node.data.image);
+
+                        container.append('text')
+                            .attr('transform', 'translate(32 -12)')
+                            .attr('text-anchor', 'middle')
+                            .text(node.data.label);
+
+                        return container;
+                    })
+                    .placeNode(function (nodeUI, pos) {
+                        nodeUI.attr('transform', `translate(${pos.x - 32}, ${pos.y - 32})`)
+                    });
+
+                    const defs = Viva.Graph.svg('defs');
+
+                    defs.append("clipPath")
+                        .attr("id", "avatar-clip")
+                        .append("circle")
+                        .attr("cx", 32)
+                        .attr("cy", 32)
+                        .attr("r", 32);
+
+                    this.graphics.getSvgRoot().appendChild(defs);
+
+                }
+
+                visualize(graph, centerNode = null) {
+                    this.graph = graph;
+
+                    if (this.renderer) {
+                        this.renderer.dispose();
+                    }
+
+                    if (this.layout) {
+                        this.layout.dispose();
+                    }
+
+                    this.layout = Viva.Graph.Layout.forceDirected(graph, {
+                        springLength: 100,
+                        springCoeff: 0.0005,
+                        dragCoeff: 0.1,
+                        gravity: -100
+                    });
+
+                    if (centerNode) {
+                        this.layout.pinNode(centerNode, true);
+                    }
+
+                    this.renderer = Viva.Graph.View.renderer(graph, { layout: this.layout, container: this.container, graphics: this.graphics });
+                    this.renderer.run();
+                }
+
+            }
+
+            const graphVisualizer = new GraphVisualizer(document.querySelector('#network'));
+
+            function calcFrequencies(words) {
+                freq = {}
+
+                words.forEach(word => {
+                    if (freq[word] == null) {
+                        freq[word] = 0;
+                    }
+                    freq[word] += 1;
+                });
+                
+                return freq;
+            }
+
+            function createWordCloudLayout(words) {
+                return new Promise((resolve, reject) => {
+                    const frequencies = calcFrequencies(words);
+
+                    const uniqueWords = Object.keys(frequencies);
+                    uniqueWords.sort((a, b) => {
+                        if (frequencies[a] < frequencies[b]) {
+                            return 1;
+                        }
+                        if (frequencies[a] > frequencies[b]) {
+                            return -1;
+                        }
+                        return 0;
+                    });
+
+
+                    const relativeSizing = 0.5;
+
+                    let lastFreq = 1;
+                    let fontSize = 100;
+
+
+                    const wordData = [];
+                    uniqueWords.forEach(word => {
+                        const relativeFreq = frequencies[word] / words.length;
+
+                        fontSize *= relativeSizing * (relativeFreq / lastFreq) + (1 - relativeSizing);
+                        fontSize = Math.round(fontSize);
+
+                        const data = {
+                            text: word,
+                            size: fontSize
+                        };
+
+                        wordData.push(data);
+                        lastFreq = relativeFreq;
+                    });
+
+
+                    const layout = d3.layout.cloud()
+                        .size([500, 500])
+                        .words(wordData)
+                        .padding(5)
+                        .rotate(() => ~~(Math.random() * 2) * 90)
+                        .fontSize(d => d.size)
+                        .on('end', words => resolve({ words, layout }));
+
+                    layout.start();
+                });
+            }
+
+            function renderWordCloud(rootSelector, cloud) {
+                const { layout, words } = cloud;
+
+                const width = layout.size()[0];
+                const height = layout.size()[1];
+
+                d3.select(rootSelector)
+                    .attr('width', width)
+                    .attr('height', height)
+                .selectAll('g')
+                .data([null])
+                .join('g')
+                    .attr('transform', `translate(${width / 2}, ${height / 2})`)
+                    .classed('foreground-fill', true)
+                .selectAll('text')
+                .data(words)
+                .join('text')
+                    .style('font-size', d => d.size + 'px')
+                    .attr('text-anchor', 'middle')
+                    .attr('transform', d => `translate(${[d.x, d.y]}) rotate(${d.rotate})`)
+                    .text(d => d.text);
+            }
+
+            async function extractChannelId(descriptor) {
+                const url = '/extract_channel_id?' + new URLSearchParams({
+                    descriptor
+                });
+
+                const response = await fetch(url);
+
+                return await response.json();
+            }
+
+            async function relatedChannelGraph(channelId) {
+                const response = await fetch(`/channel_graph/${channelId}`)
+
+                const { nodes, edges } = await response.json();
+
+                const graph = Viva.Graph.graph();
+
+                nodes.forEach(node => graph.addNode(node.id, node.data));
+                edges.forEach(edge => graph.addLink(edge.source, edge.target));
+
+                return graph;
+            }
+
+            async function analyseChannel(channelId) {
+                const response = await fetch(`/analyse_channel/${channelId}`)
+
+                return await response.json();
+            }
+
+            async function showChannelInfo(channelId) {
+                const infos = await analyseChannel(channelId);
+
+                const statistics = document.querySelector('#info div');
+                statistics.innerHTML = '';
+
+                statistics.innerText = `${infos.statistics.subscriber_count} Subscribers | ${infos.statistics.video_count} Videos | ${infos.statistics.view_count} Views`;
+
+                const cloud = await createWordCloudLayout(infos.topics);
+                renderWordCloud('#info svg', cloud);
+
+                halfmoon.toggleModal('channel-info-modal');
+            }
+
+            document.querySelector('#search-button').addEventListener('click', async () => {
+                const query = document.querySelector('#search-input').value;
+
+                const channelId = await extractChannelId(query);
+
+                const graph = await relatedChannelGraph(channelId);
+                const centerNode = graph.getNode(channelId);
+
+                graphVisualizer.visualize(graph, centerNode);
+            });
+        </script>
+    </body>
+</html>

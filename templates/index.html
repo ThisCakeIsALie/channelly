@@ -5,6 +5,10 @@
             type="text/javascript"
             src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"
         ></script>
+        <meta charset="utf-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+        <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport" />
+        <meta name="viewport" content="width=device-width" />
         <link href="{{ url_for('static', filename='css/halfmoon-variables.css') }}" rel="stylesheet">
         <script type="text/javascript" src="{{ url_for('static', filename='js/vivagraph.js') }}"></script>
         <script src="{{ url_for('static', filename='js/halfmoon.min.js')}}"></script>
@@ -19,6 +23,10 @@
             #network svg {
                 width: 100%;
                 height: 100%;
+            }
+
+            svg {
+                max-width: 100%;
             }
 
             .node:hover {
@@ -42,9 +50,8 @@
                     <a data-dismiss="modal" class="close" role="button" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </a>
-                    <div id="info" class="container">
-                        <svg></svg>
-                        <ul></ul>
+                    <div id="modal-info" class="container h-full d-flex flex-column align-items-center justify-content-center">
+                        <svg viewBox="0 0 500 500"></svg>
                         <div></div>
                     </div>
                 </div>
@@ -54,8 +61,13 @@
         <div class="page-wrapper">
             <div class="content-wrapper">
                 <div class="card w-lg-quarter mw-full z-lg-10 position-lg-absolute row shadow">
-                    <input id="search-input" type="text" class="form-control col">
-                    <button id="search-button" class="btn btn-primary col-auto offset-1">Go!</button>
+                    <input id="search-input" type="text" class="form-control col-8">
+                    <button id="search-button" class="btn btn-primary col-3 offset-1">Go!</button>
+                    <div id="widget-info" class="col-12" hidden>
+                        <hr />
+                        <svg viewBox="0 0 500 500"></svg>
+                        <div></div>
+                    </div>
                 </div>
                 <div id="network"></div>
             </div>
@@ -63,6 +75,16 @@
         <script>
             const graphGenerator = Viva.Graph.generator();
             let graph = graphGenerator.grid(3, 3);
+
+            function extractPosition(event) {
+                if (event.clientX && event.clientY) {
+                    return { x: event.clientX, y: event.clientY };
+                }
+
+                const touches = Array.from(event.touches).concat(Array.from(event.changedTouches));
+                const [ primary, _ ] = Array.from(touches);
+                return { x: primary.pageX, y: primary.pageY };
+            }
 
             class GraphVisualizer {
 
@@ -78,30 +100,44 @@
 
                         let lastX, lastY;
                         let rendererPaused = false;
-                        container.on('mousedown', async e => {
-                            lastX = e.clientX;
-                            lastY = e.clientY;
+
+                        const startListener = async e => {
+                            console.log('start');
+                            const pos = extractPosition(e);
+                            lastX = pos.x;
+                            lastY = pos.y;
 
                             this.renderer.pause();
                             rendererPaused = true;
-                        });
+                        };
 
-                        container.on('mousemove', () => {
+                        const moveListener = () => {
+                            console.log('move');
                             if (rendererPaused) {
                                 this.renderer.resume();
                                 rendererPaused = false;
                             }
-                        });
+                        };
 
-                        container.on('mouseup', async e => {
-                            if (Math.sqrt((lastX - e.clientX)**2 + (lastY - e.clientY)**2) == 0) {
+                        const endListener = async e => {
+                            const pos = extractPosition(e);
+
+                            if (Math.sqrt((lastX - pos.x)**2 + (lastY - pos.y)**2) == 0) {
                                 showChannelInfo(node.id);
                             }
                             setTimeout(() => {
                                 this.renderer.resume();
                                 rendererPaused = false;
                             });
-                        });
+                        };
+
+                        container.on('touchstart', startListener);
+                        container.on('touchmove', moveListener);
+                        container.on('touchend', endListener);
+
+                        container.on('mousedown', startListener);
+                        container.on('mousemove', moveListener);
+                        container.on('mouseup', endListener);
 
                         container.attr('class', 'foreground-fill')
 
@@ -284,15 +320,24 @@
             async function showChannelInfo(channelId) {
                 const infos = await analyseChannel(channelId);
 
-                const statistics = document.querySelector('#info div');
+                const query = window.matchMedia('(min-width: 532px)');
+
+                let infoContainerQuery = query.matches ? '#widget-info' : '#modal-info';
+
+                const statistics = document.querySelector(`${infoContainerQuery} div`);
                 statistics.innerHTML = '';
 
                 statistics.innerText = `${infos.statistics.subscriber_count} Subscribers | ${infos.statistics.video_count} Videos | ${infos.statistics.view_count} Views`;
 
                 const cloud = await createWordCloudLayout(infos.topics);
-                renderWordCloud('#info svg', cloud);
+                renderWordCloud(`${infoContainerQuery} svg`, cloud);
 
-                halfmoon.toggleModal('channel-info-modal');
+                console.log(query)
+                if (query.matches) {
+                    document.querySelector(infoContainerQuery).hidden = false;
+                } else {
+                    halfmoon.toggleModal('channel-info-modal');
+                }
             }
 
             document.querySelector('#search-button').addEventListener('click', async () => {

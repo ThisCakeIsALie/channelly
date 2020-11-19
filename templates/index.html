@@ -100,7 +100,7 @@
         </div>
         <div class="page-wrapper">
             <div class="content-wrapper">
-                <div class="w-lg-quarter mw-full z-lg-10 position-lg-absolute content">
+                <div class="w-lg-quarter h-lg-three-quarter mw-full position-lg-absolute z-lg-10 content d-flex flex-column">
                     <details class="collapse-panel w-lg-full shadow bg-dark-light bg-light-lm" open>
                         <summary class="collapse-header">Search</summary>
                         <div class="row collapse-content">
@@ -120,11 +120,13 @@
                             </ol>
                         </div>
                     </details>
-                    <div id="widget-info" class="col-12" hidden>
-                        <hr />
-                        <svg viewBox="0 0 500 500"></svg>
-                        <div></div>
-                    </div>
+                    <details id="widget-info" class="collapse-panel mt-20" hidden open>
+                        <summary class="collapse-header">Details</summary>
+                        <div class="collapse-content">
+                            <svg viewBox="0 0 500 500"></svg>
+                            <div class="statistics"></div>
+                        </div>
+                    </details>
                 </div>
                 <div id="network"></div>
             </div>
@@ -381,7 +383,7 @@
 
                 let infoContainerQuery = query.matches ? '#widget-info' : '#modal-info';
 
-                const statistics = document.querySelector(`${infoContainerQuery} div`);
+                const statistics = document.querySelector(`${infoContainerQuery} .statistics`);
                 statistics.innerHTML = '';
 
                 statistics.innerText = `${infos.statistics.subscriber_count} Subscribers | ${infos.statistics.video_count} Videos | ${infos.statistics.view_count} Views`;

@@ -379,9 +379,9 @@
             async function showChannelInfo(channelId) {
                 const infos = await analyseChannel(channelId);
 
-                const query = window.matchMedia('(min-width: 532px)');
+                const isDesktop = window.matchMedia('(min-width: 532px)').matches;
 
-                let infoContainerQuery = query.matches ? '#widget-info' : '#modal-info';
+                let infoContainerQuery = isDesktop ? '#widget-info' : '#modal-info';
 
                 const statistics = document.querySelector(`${infoContainerQuery} .statistics`);
                 statistics.innerHTML = '';
@@ -391,9 +391,12 @@
                 const cloud = await createWordCloudLayout(infos.topics);
                 renderWordCloud(`${infoContainerQuery} svg`, cloud);
 
-                console.log(query)
-                if (query.matches) {
-                    document.querySelector(infoContainerQuery).hidden = false;
+                if (isDesktop) {
+                    const container = document.querySelector(infoContainerQuery);
+
+                    container.hidden = false;
+                    container.querySelector('summary').innerText = `Details - ${infos.name}`;
+
                 } else {
                     halfmoon.toggleModal('channel-info-modal');
                 }

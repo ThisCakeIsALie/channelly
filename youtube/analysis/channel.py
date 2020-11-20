@@ -101,16 +101,28 @@ async def channel_statistics(channel_id):
 def channel_sentiment(channel_id):
     return 0
 
+async def channel_name(channel_id):
+    data = await channel_data(channel_id)
+    
+    if data is None:
+        return None
+        
+    snippet = data['snippet']
+
+    return snippet['title']
+
 @dataclass
 class ChannelAnalysis:
+    name: str
     topics: List[str]
     sentiment: float
     statistics: ChannelStatistics
 
 @alru_cache(maxsize=4096)
 async def analyse_channel(channel_id):
+    name = await channel_name(channel_id)
     topics = await related_topics(channel_id)
     sentiment = channel_sentiment(channel_id)
     statistics = await channel_statistics(channel_id)
     
-    return ChannelAnalysis(topics, sentiment, statistics)
+    return ChannelAnalysis(name, topics, sentiment, statistics)

@@ -93,6 +93,14 @@
                 0%    {opacity: 0; margin-left: -10px}
                 100%  {opacity: 1; margin-left: 0px}
             }
+
+            .channel-info-container {
+                display: grid;
+                grid-template-areas:
+                  "profile-pic name name"
+                  "word-cloud word-cloud word-cloud"
+                  "subscribers videos views";
+            }
         </style>
     </head>
     <body data-dm-shortcut-enabled="true" class="with-custom-webkit-scrollbars with-custom-css-scrollbars">
